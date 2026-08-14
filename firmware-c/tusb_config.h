@@ -26,4 +26,10 @@
 #define CFG_TUD_CDC_TX_BUFSIZE 256
 #define CFG_TUD_CDC_EP_BUFSIZE 64
 
+/* RP2040 USB errata E5/E15: an armed bulk-IN buffer can stop answering
+ * IN tokens, so the tail of a reply never reaches the host until some
+ * later transfer re-arms the endpoint.  Enables the SOF-driven re-arm
+ * workaround in dcd_rp2040. */
+#define TUD_OPT_RP2040_USB_DEVICE_UFRAME_FIX 1
+
 #endif /* SPIDRIVER_TUSB_CONFIG_H */
