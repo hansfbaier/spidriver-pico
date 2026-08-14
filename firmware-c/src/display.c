@@ -104,12 +104,12 @@ typedef struct {
 } label_t;
 
 static const label_t labels[6] = {
-    {"SCK", 43, 15, 9, 2, -2},
-    {"MISO", 64, 15, 14, 2, 0},
-    {"MOSI", 85, 8, 15, 2, 0},
-    {"CS", 106, 1, 9, 15, -1},
-    {"A", 127, 13, 7, 13, 0},
-    {"B", 148, 8, 8, 6, 0},
+    {"SCK", 39, 15, 9, 2, -2},
+    {"MISO", 60, 15, 14, 2, 0},
+    {"MOSI", 81, 8, 15, 2, 0},
+    {"CS", 102, 1, 9, 15, -1},
+    {"A", 123, 13, 7, 13, 0},
+    {"B", 144, 8, 8, 6, 0},
 };
 
 #define WAVE_X 0
@@ -386,7 +386,7 @@ void display_waves(const st7735_bus *lcd, const wave_entry_t *entries, int n,
         render_row(lcd, entries, n, port, i, labels[i].r, labels[i].g,
                    labels[i].b);
     }
-    annotate(lcd, entries, n, 76, false); /* MISO */
-    annotate(lcd, entries, n, 97, true);  /* MOSI */
+    annotate(lcd, entries, n, 72, false); /* MISO */
+    annotate(lcd, entries, n, 93, true);  /* MOSI */
     boxes(lcd, port);
 }
