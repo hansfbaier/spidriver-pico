@@ -55,20 +55,24 @@ tools/genfonts.py  font generator (run once; output committed)
 
 | GPIO | Function |
 | --- | --- |
-| 2 | SCK (target SPI, SPI0) |
-| 3 | MOSI (target SPI) |
-| 4 | MISO (target SPI) |
-| 5 | CS (target SPI) |
+| 2 | SCK (LCD, SPI0) |
+| 3 | MOSI / SDA (LCD) |
+| 4 | DC / RS / A0 (LCD, data/command) |
+| 5 | CS (LCD) |
 | 6 | A (auxiliary signal) |
 | 7 | B (auxiliary signal) |
-| 10 | SCK (LCD, SPI1) |
-| 11 | MOSI (LCD) |
-| 12 | CS (LCD) |
-| 13 | DC (LCD) |
-| 14 | RESET (LCD) |
+| 8 | MISO (target SPI1) |
+| 9 | CS (target SPI1) |
+| 10 | SCK (target SPI1) |
+| 11 | MOSI (target SPI1) |
 | 26 | VBUS sense (ADC0) |
 | 27 | current sense (ADC1) |
 | — | internal ADC4 = temperature |
+
+Both SPI buses are hardware SPI (no bit-banging). LCD RESET is not wired;
+tie it to 3V3, as on the original board. The target MOSI sits on GP11
+(pin 15): RP2040 hardware-SPI pins come in fixed sets, so no complete
+SPI set fits inside physical pins 9-13.
 
 Edit the `PIN_*` defines at the top of `pico/hal_pico.c` to rewire.
 

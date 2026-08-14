@@ -23,7 +23,7 @@ C_DIM = "#9db8a5"
 
 C_SPI = "#f0a92e"  # target SPI bus
 C_AUX = "#e05fd0"  # A / B aux outputs
-C_LCD = "#46a0f0"  # LCD bus (SPI1)
+C_LCD = "#46a0f0"  # LCD bus (SPI0)
 C_ADC = "#f2d24c"  # analog inputs
 C_PWR = "#e2574c"  # power
 C_GND = "#7d8a80"  # ground
@@ -34,22 +34,22 @@ BOTTOM = [
     (1, "GP0", None, None),
     (2, "GP1", None, None),
     (3, "GND", "GND", C_GND),
-    (4, "GP2", "SCK", C_SPI),
-    (5, "GP3", "MOSI", C_SPI),
-    (6, "GP4", "MISO", C_SPI),
-    (7, "GP5", "CS", C_SPI),
+    (4, "GP2", "SCK", C_LCD),
+    (5, "GP3", "MOSI", C_LCD),
+    (6, "GP4", "DC", C_LCD),
+    (7, "GP5", "CS", C_LCD),
     (8, "GND", "GND", C_GND),
     (9, "GP6", "A", C_AUX),
     (10, "GP7", "B", C_AUX),
-    (11, "GP8", None, None),
-    (12, "GP9", None, None),
+    (11, "GP8", "MISO", C_SPI),
+    (12, "GP9", "CS", C_SPI),
     (13, "GND", "GND", C_GND),
-    (14, "GP10", "SCK", C_LCD),
-    (15, "GP11", "MOSI", C_LCD),
-    (16, "GP12", "CS", C_LCD),
-    (17, "GP13", "DC", C_LCD),
+    (14, "GP10", "SCK", C_SPI),
+    (15, "GP11", "MOSI", C_SPI),
+    (16, "GP12", None, None),
+    (17, "GP13", None, None),
     (18, "GND", "GND", C_GND),
-    (19, "GP14", "RST", C_LCD),
+    (19, "GP14", None, None),
     (20, "GP15", None, None),
 ]
 # top row, left -> right (pins 40..21)
@@ -170,9 +170,12 @@ text(
 )
 ly = OY + BH + 34
 items = [
-    (C_SPI, "target SPI:  SCK (GP2)  MOSI (GP3)  MISO (GP4)  CS (GP5)"),
+    (
+        C_LCD,
+        "LCD (SPI0):  SCK (GP2)  MOSI (GP3)  DC (GP4)  CS (GP5)  RESET tied to 3V3",
+    ),
+    (C_SPI, "target SPI1:  SCK (GP10)  MOSI (GP11)  MISO (GP8)  CS (GP9)"),
     (C_AUX, "aux outputs:  A (GP6)  B (GP7)"),
-    (C_LCD, "LCD (SPI1):  SCK (GP10)  MOSI (GP11)  CS (GP12)  DC (GP13)  RST (GP14)"),
     (C_ADC, "analog:  VBUS (GP26 / ADC0)  current (GP27 / ADC1)  temp = internal ADC4"),
     (C_PWR, "power:  VBUS (pin 40)  3V3 (pin 36)"),
     (C_GND, "GND"),

@@ -1,15 +1,19 @@
 /* SPIDriver firmware -- Raspberry Pi Pico (RP2040) port.
  *
- * Pin map (all configurable below):
+ * Pin map (all configurable below; both SPI buses are hardware SPI):
  *
- *   GPIO2  SCK      target SPI (SPI0)   GPIO10 SCK      LCD (SPI1)
- *   GPIO3  MOSI     target SPI          GPIO11 MOSI     LCD
- *   GPIO4  MISO     target SPI          GPIO12 CS       LCD
- *   GPIO5  CS       target SPI          GPIO13 DC       LCD
- *   GPIO6  A        signal output       GPIO14 RESET    LCD (optional)
+ *   GPIO2  SCK      LCD (SPI0)          GPIO10 SCK      target SPI (SPI1)
+ *   GPIO3  MOSI     LCD                 GPIO11 MOSI     target SPI
+ *   GPIO4  DC       LCD                 GPIO8  MISO     target SPI
+ *   GPIO5  CS       LCD                 GPIO9  CS       target SPI
+ *   GPIO6  A        signal output
  *   GPIO7  B        signal output
  *   GPIO26 VBUS sense (ADC0)            GPIO27 current sense (ADC1)
  *   internal ADC4  temperature sensor
+ *
+ * LCD RESET is not wired; tie it to 3V3 (as on the original board).
+ * Note: RP2040 hardware SPI pins are fixed sets, so the target MOSI cannot
+ * sit on physical pins 9-13; GP11 (pin 15) is the closest SPI1 TX option.
  *
  * The transport is USB CDC (TinyUSB); the original board's FTDI UART is not
  * needed because the RP2040 has a native USB controller.
@@ -29,18 +33,18 @@
 #include "usb_descriptors.h"
 
 /* ---- pin map ---- */
-#define PIN_T_SCK 2
-#define PIN_T_MOSI 3
-#define PIN_T_MISO 4
-#define PIN_T_CS 5
+/* LCD on SPI0 (physical pins 4-7); target on SPI1 (pins 9-13 where possible) */
+#define PIN_LCD_SCK 2
+#define PIN_LCD_MOSI 3
+#define PIN_LCD_DC 4
+#define PIN_LCD_CS 5
+
+#define PIN_T_SCK 10
+#define PIN_T_MOSI 11
+#define PIN_T_MISO 8
+#define PIN_T_CS 9
 #define PIN_A 6
 #define PIN_B 7
-
-#define PIN_LCD_SCK 10
-#define PIN_LCD_MOSI 11
-#define PIN_LCD_CS 12
-#define PIN_LCD_DC 13
-#define PIN_LCD_RST 14
 
 #define PIN_VBUS_ADC 26
 #define PIN_CURR_ADC 27
@@ -86,7 +90,7 @@ static void spi_detach(void) { spi_target_pins_float(); }
 
 static uint8_t spi_xfer(uint8_t b) {
     uint8_t r = 0;
-    spi_write_read_blocking(spi0, &b, &r, 1);
+    spi_write_read_blocking(spi1, &b, &r, 1);
     return r;
 }
 
@@ -144,15 +148,13 @@ static uint16_t hal_adc_read(unsigned ch) {
     return (uint16_t)adc_read();
 }
 
-/* ---- LCD bus (SPI1) ---- */
+/* ---- LCD bus (SPI0) ---- */
 static void lcd_cs(bool v) { gpio_put(PIN_LCD_CS, v ? 1 : 0); }
 static void lcd_dc(bool v) { gpio_put(PIN_LCD_DC, v ? 1 : 0); }
 
 static void lcd_write(uint8_t b) {
-    spi_write_blocking(spi1, &b, 1);
+    spi_write_blocking(spi0, &b, 1);
 }
-
-static void lcd_reset(bool v) { gpio_put(PIN_LCD_RST, v ? 1 : 0); }
 
 /* ---- tick ---- */
 static bool tick_cb(struct repeating_timer *t) {
@@ -163,27 +165,19 @@ static bool tick_cb(struct repeating_timer *t) {
 
 /* ---- init ---- */
 static void hw_init(void) {
-    /* target SPI */
-    spi_init(spi0, SPI_TARGET_HZ);
-    spi_target_pins_drive();
-    gpio_put(PIN_T_CS, 1);
-
-    /* LCD SPI */
-    spi_init(spi1, SPI_LCD_HZ);
+    /* LCD SPI (SPI0); no reset pin, LCD RESET tied to 3V3 externally */
+    spi_init(spi0, SPI_LCD_HZ);
     gpio_set_function(PIN_LCD_SCK, GPIO_FUNC_SPI);
     gpio_set_function(PIN_LCD_MOSI, GPIO_FUNC_SPI);
     gpio_init(PIN_LCD_CS);
     gpio_set_dir(PIN_LCD_CS, GPIO_OUT);
     gpio_init(PIN_LCD_DC);
     gpio_set_dir(PIN_LCD_DC, GPIO_OUT);
-    gpio_init(PIN_LCD_RST);
-    gpio_set_dir(PIN_LCD_RST, GPIO_OUT);
 
-    /* LCD hardware reset pulse */
-    lcd_reset(false);
-    sleep_ms(10);
-    lcd_reset(true);
-    sleep_ms(120);
+    /* target SPI (SPI1) */
+    spi_init(spi1, SPI_TARGET_HZ);
+    spi_target_pins_drive();
+    gpio_put(PIN_T_CS, 1);
 
     /* ADC */
     adc_init();
@@ -219,7 +213,7 @@ int main(void) {
     g_hal.lcd_cs = lcd_cs;
     g_hal.lcd_dc = lcd_dc;
     g_hal.lcd_write = lcd_write;
-    g_hal.lcd_reset = lcd_reset;
+    g_hal.lcd_reset = NULL;
 
     /* Calibration (raw16 scale = raw12 << 4).  See README for derivation. */
     g_hal.cal_vbus_mv = 8250;      /* 3.3 V ref, divider Vbus = 2.5 x Vpin */
