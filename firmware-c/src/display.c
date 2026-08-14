@@ -224,8 +224,8 @@ static void vline(int x, int y0, int y1, uint8_t v) {
     }
 }
 
-#define TOP 2
-#define BOT 7
+#define TOP 0
+#define BOT 8
 #define FULL 15
 #define DIM 7
 
@@ -252,12 +252,19 @@ static int draw_byte_wave(int x0, int w, uint8_t byte, bool invert,
         hline(x, nx - 1, y, FULL);
         x = nx;
     }
-    /* fill trailing columns with the last bit's level (entry is 18 wide,
-     * 8 bits * 2 px = 16 drawn, extend the tail to avoid gaps) */
+    /* fill trailing columns at idle (BOT); draw a falling edge if the
+     * last bit was high */
     if (x < x0 + w) {
         int b = byte & 1;
         if (invert) b = 1 - b;
-        hline(x, x0 + w - 1, b ? TOP : BOT, FULL);
+        if (b) {
+            vline(x, TOP, BOT, FULL);
+            if (x + 1 < x0 + w) {
+                hline(x + 1, x0 + w - 1, BOT, FULL);
+            }
+        } else {
+            hline(x, x0 + w - 1, BOT, FULL);
+        }
     }
     /* vertical transitions between bit levels */
     x = x0;
@@ -274,7 +281,8 @@ static int draw_byte_wave(int x0, int w, uint8_t byte, bool invert,
     }
     int last_b = byte & 1;
     if (invert) last_b = 1 - last_b;
-    return last_b ? TOP : BOT;
+    (void)last_b;
+    return BOT; /* trailing edge always returns to idle */
 }
 
 /* Render one strip row. */
@@ -351,7 +359,7 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
     }
 
     /* blit */
-    int ytop = labels[row].y + 4;
+    int ytop = labels[row].y;
     st7735_set_window(lcd, WAVE_X, (uint16_t)ytop, WAVE_X + WAVE_W - 1,
                       (uint16_t)(ytop + WAVE_H - 1));
     st7735_start_pixels(lcd);
@@ -408,7 +416,7 @@ void display_waves(const st7735_bus *lcd, const wave_entry_t *entries, int n,
         render_row(lcd, entries, n, port, i, labels[i].r, labels[i].g,
                    labels[i].b);
     }
-    annotate(lcd, entries, n, 74, false); /* MISO */
-    annotate(lcd, entries, n, 95, true);  /* MOSI */
+    annotate(lcd, entries, n, 70, false); /* MISO */
+    annotate(lcd, entries, n, 91, true);  /* MOSI */
     boxes(lcd, port);
 }
