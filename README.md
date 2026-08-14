@@ -18,11 +18,28 @@ and there are included drivers for
 
 ![front](/images/DSC_1313a.JPG)
 
+## Firmware for the Raspberry Pi Pico
+
+The original SPIDriver firmware is written in [MyForth](http://www.kiblerelectronics.com/myf/myf.shtml)
+for the Silabs EFM8BB10.
+It has been ported to portable C, targeting the Raspberry Pi Pico (RP2040) first.
+
+The portable core is in [`firmware-c/src`](firmware-c/src), with the RP2040 port in
+[`firmware-c/pico`](firmware-c/pico).
+It implements the same host protocol (drop-in compatible with the included drivers),
+CCITT-16 CRC, USB-voltage/current/temperature measurement and the ST7735S logic-analyzer
+display.
+
+![Pico pinout](firmware-c/images/pico-pinout.png)
+
+See [`firmware-c/README.md`](firmware-c/README.md) for the pin map, build instructions and
+port details.
+
 ## Contributed language bindings
 
 The following bindings were contributed by SPIDriver community members:
 
-* **.net** https://github.com/alandoherty/spidriver-net
-* **rust** https://docs.rs/spidriver/0.1.0/spidriver/
+* **.net** <https://github.com/alandoherty/spidriver-net>
+* **rust** <https://docs.rs/spidriver/0.1.0/spidriver/>
 
 [spidriver.com](https://spidriver.com)
