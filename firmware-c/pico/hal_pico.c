@@ -121,6 +121,9 @@ static void uart_put(uint8_t b) {
     while (!tud_cdc_write(&b, 1)) {
         tud_task();
     }
+    /* this TinyUSB version only auto-flushes at >=64 queued bytes; small
+     * packets (echo replies) would otherwise sit in the FIFO forever */
+    tud_cdc_write_flush();
 }
 
 /* ---- time ---- */

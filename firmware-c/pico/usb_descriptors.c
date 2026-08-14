@@ -1,6 +1,7 @@
 /* USB descriptors: a single CDC-ACM serial port. */
 #include <stdint.h>
 
+#include "pico/bootrom.h"
 #include "pico/unique_id.h"
 #include "tusb.h" // IWYU pragma: keep
 
@@ -14,7 +15,7 @@
 #define USBD_STR_CDC 0x04
 
 #define USBD_ITF_CDC 0
-#define USBD_ITF_MAX 1
+#define USBD_ITF_MAX 2 /* CDC control + data interfaces */
 
 #define USBD_CDC_EP_CMD 0x81
 #define USBD_CDC_EP_OUT 0x02
@@ -81,6 +82,16 @@ const uint8_t *tud_descriptor_device_cb(void) {
 const uint8_t *tud_descriptor_configuration_cb(uint8_t index) {
     (void)index;
     return usbd_desc_cfg;
+}
+
+/* Reboot into the RP2040 bootrom (BOOTSEL) when the host opens the port at
+ * 1200 baud -- same convention as pico_stdio_usb/Arduino.  Lets a host
+ * re-flash without touching the BOOTSEL button. */
+void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const *line_coding) {
+    (void)itf;
+    if (line_coding->bit_rate == 1200) {
+        reset_usb_boot(0, 0);
+    }
 }
 
 const uint16_t *tud_descriptor_string_cb(uint8_t index, uint16_t langid) {

@@ -134,11 +134,7 @@ static int entry_width(uint8_t code) {
 
 /* ---- init & static text ------------------------------------------------ */
 
-void display_init(const st7735_bus *lcd) {
-    st7735_init(lcd);
-    st7735_fill_rect(lcd, 0, 0, ST7735_W, ST7735_H, 0, 0, 0);
-
-    /* static labels */
+void display_labels(const st7735_bus *lcd) {
     for (int i = 0; i < 6; i++) {
         int x = 112 - text_width(labels[i].name) / 2 + labels[i].dx;
         draw_text(lcd, labels[i].name, x, labels[i].y, labels[i].r, labels[i].g,
@@ -146,6 +142,26 @@ void display_init(const st7735_bus *lcd) {
     }
     draw_text(lcd, "V", 45, 12, 15, 15, 15);
     draw_text(lcd, "mA", 98, 12, 15, 15, 15);
+}
+
+void display_init(const st7735_bus *lcd) {
+    st7735_init(lcd);
+    st7735_fill_rect(lcd, 0, 0, ST7735_W, ST7735_H, 0, 0, 0);
+    display_labels(lcd);
+}
+
+/* Boot self-test: eight 16-px vertical bars (black, red, green, blue,
+ * yellow, magenta, cyan, white).  Correct colors = panel wired + packed
+ * right; scrambled channels = color-order/packing problem. */
+void display_colorbar(const st7735_bus *lcd) {
+    static const uint8_t bars[8][3] = {
+        {0, 0, 0},     {15, 0, 0},    {0, 15, 0},   {0, 0, 15},
+        {15, 15, 0},   {15, 0, 15},   {0, 15, 15},  {15, 15, 15},
+    };
+    for (int i = 0; i < 8; i++) {
+        st7735_fill_rect(lcd, (uint16_t)(i * 16), 0, 16, ST7735_H, bars[i][0],
+                         bars[i][1], bars[i][2]);
+    }
 }
 
 /* ---- top readings ------------------------------------------------------- */
@@ -165,15 +181,18 @@ void display_results(const st7735_bus *lcd, int32_t vbus_mv, int32_t cur_ma) {
     if (fv < 0) fv = -fv;
     if (iv < 0) iv = -iv;
 
-    /* clear reading areas, then draw */
-    st7735_fill_rect(lcd, 12, 14, 34, 12, 0, 0, 0);
+    /* clear exactly the previous text extent, then draw (the fixed-width
+     * clear rect used to clip the neighbouring V/mA labels) */
     int len = snprintf(buf, sizeof(buf), "%d.%02d", iv, fv);
     (void)len;
+    int w = text_width(buf);
+    st7735_fill_rect(lcd, 12, 14, (uint16_t)w, 10, 0, 0, 0);
     draw_number(lcd, 12, 14, buf);
 
-    st7735_fill_rect(lcd, 70, 14, 28, 12, 0, 0, 0);
     len = snprintf(buf, sizeof(buf), "%3d", (int)cur_ma);
     (void)len;
+    w = text_width(buf);
+    st7735_fill_rect(lcd, 70, 14, (uint16_t)w, 10, 0, 0, 0);
     draw_number(lcd, 70, 14, buf);
 }
 

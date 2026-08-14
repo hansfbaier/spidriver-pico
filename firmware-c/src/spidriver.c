@@ -280,6 +280,12 @@ void spidriver_init(spidriver_hal *hal) {
 
     display_init(&st.lcd);
 
+    /* boot self-test: show the colorbar briefly, then the normal screen */
+    display_colorbar(&st.lcd);
+    hal->delay_ms(1500);
+    st7735_fill_rect(&st.lcd, 0, 0, ST7735_W, ST7735_H, 0, 0, 0);
+    display_labels(&st.lcd);
+
     /* pre-converge the EMA filters so the first status read is sensible */
     for (int i = 0; i < 32; i++) {
         read_adc(hal);

@@ -132,6 +132,10 @@ printf '?' | ./build/spidriver_host        # print one status line
 * **Box indicator** clears its outline when the signal is low (the original
   left a stale outline).
 * **Serial string**: derived from the RP2040 unique board id.
+* **Boot colorbar self-test**: at boot the panel shows an 8-color test bar
+  for 1.5 s, then the normal screen.
+* **1200-baud reflash**: opening the port at 1200 baud reboots into BOOTSEL
+  (Arduino convention), so firmware updates need no button press.
 
 ## License
 

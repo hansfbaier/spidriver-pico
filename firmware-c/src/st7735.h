@@ -32,7 +32,8 @@ void st7735_set_window(const st7735_bus *bus, uint16_t x0, uint16_t y0,
                        uint16_t x1, uint16_t y1);
 
 /* Begin streaming raw pixels into the current window; call
- * st7735_pixel() N times (w*h) then st7735_end_pixels(). */
+ * st7735_pixel() N times (w*h) then st7735_end_pixels().  Pixels are 12-bit
+ * (b4 g4 r4), packed two-per-three-bytes like the original firmware. */
 void st7735_start_pixels(const st7735_bus *bus);
 void st7735_pixel(const st7735_bus *bus, uint8_t r4, uint8_t g4, uint8_t b4);
 void st7735_end_pixels(const st7735_bus *bus);

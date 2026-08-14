@@ -2,6 +2,10 @@
  * firmware's `coldregs` table (firmware/st7735.fs). */
 #include "st7735.h"
 
+/* 12-bit pixel packing state (2 pixels -> 3 bytes) */
+static uint8_t px_nib;
+static bool px_half;
+
 /* ST7735 command codes (subset). */
 enum {
     NOP = 0x00, SWRESET = 0x01, SLPOUT = 0x11, NORON = 0x13, INVOFF = 0x20,
@@ -92,14 +96,30 @@ void st7735_start_pixels(const st7735_bus *bus) {
     cmd(bus, RAMWR);
     bus->dc(true);
     bus->cs(false);
+    px_half = false;
 }
 
+/* 12-bit color: the panel consumes exactly 12 bits per pixel (b4 g4 r4),
+ * matching the original firmware's bit-banged nibble order.  Two pixels are
+ * therefore packed into three bytes. */
 void st7735_pixel(const st7735_bus *bus, uint8_t r4, uint8_t g4, uint8_t b4) {
-    bus->write((uint8_t)((b4 << 4) | g4));
-    bus->write((uint8_t)(r4 << 4));
+    if (!px_half) {
+        bus->write((uint8_t)((b4 << 4) | g4));
+        px_nib = r4 & 0x0F;
+        px_half = true;
+    } else {
+        bus->write((uint8_t)((px_nib << 4) | (b4 & 0x0F)));
+        bus->write((uint8_t)((g4 << 4) | (r4 & 0x0F)));
+        px_half = false;
+    }
 }
 
 void st7735_end_pixels(const st7735_bus *bus) {
+    if (px_half) {
+        /* flush a trailing odd pixel: its last nibble + 4 pad bits */
+        bus->write((uint8_t)(px_nib << 4));
+        px_half = false;
+    }
     bus->cs(true);
 }
 

@@ -20,6 +20,8 @@ typedef struct {
 } wave_entry_t;
 
 void display_init(const st7735_bus *lcd); /* init panel + static labels */
+void display_labels(const st7735_bus *lcd); /* redraw the static text */
+void display_colorbar(const st7735_bus *lcd); /* boot self-test pattern */
 void display_results(const st7735_bus *lcd, int32_t vbus_mv, int32_t cur_ma);
 
 /* Render the waveform strips.  `entries` is newest-last (entries[0] oldest,

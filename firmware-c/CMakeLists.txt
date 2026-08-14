@@ -32,6 +32,7 @@ target_include_directories(spidriver_pico PRIVATE
 target_link_libraries(spidriver_pico PRIVATE
     pico_stdlib
     pico_unique_id
+    pico_bootrom
     tinyusb_device
     tinyusb_board
     hardware_adc
