@@ -295,11 +295,12 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
                     hline(x, x + w - 1, BOT, FULL);
                 }
                 break;
-            case 2: /* MOSI: 'b' entries */
+            case 2: /* MOSI: write-only ('b') AND duplex ('c') clock data
+                       out -- the original matches entry-type bit 1 */
                 if (e->code == 'x') {
                     hline(x, x + w - 1, TOP, DIM);
                     hline(x, x + w - 1, BOT, DIM);
-                } else if (e->code == 'b') {
+                } else if (e->code == 'b' || e->code == 'c') {
                     draw_byte_wave(x, w, e->v0, false);
                 } else if (e->code == 'a') {
                     hline(x, x + w - 1, BOT, FULL);
@@ -354,7 +355,8 @@ static void annotate(const st7735_bus *lcd, const wave_entry_t *entries, int n,
         int w = entry_width(e->code);
         x -= w;
         if (x < 0) break;
-        bool match = mosi ? (e->code == 'b') : (e->code == 'c');
+        bool match = mosi ? (e->code == 'b' || e->code == 'c')
+                          : (e->code == 'c');
         if (match) {
             uint8_t byte = mosi ? e->v0 : e->v1;
             draw_micro(lcd, byte >> 4, x, y, 15, 15, 15);
