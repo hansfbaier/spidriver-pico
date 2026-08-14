@@ -163,6 +163,24 @@ def main():
     all_ok &= expect("final status length", n >= 80, f" ({n})")
     print(" ", s.strip())
 
+    # 9. Display exercise: SPI traffic interleaved with A/B toggles
+    print("\n9. Display exercise (SPI + A/B)")
+    cmd(fd, b"s")
+    cmd(fd, b"a\x01")                              # A high
+    d = cmd(fd, bytes([0x80, 0xDE]), expect_len=1)
+    all_ok &= expect("  duplex 0xDE", len(d) == 1)
+    cmd(fd, b"b\x01")                              # B high
+    d = cmd(fd, bytes([0x80, 0xAD]), expect_len=1)
+    all_ok &= expect("  duplex 0xAD", len(d) == 1)
+    cmd(fd, b"a\x00")                              # A low
+    d = cmd(fd, bytes([0x80, 0xBE]), expect_len=1)
+    all_ok &= expect("  duplex 0xBE", len(d) == 1)
+    cmd(fd, b"b\x00")                              # B low
+    d = cmd(fd, bytes([0x80, 0xEF]), expect_len=1)
+    all_ok &= expect("  duplex 0xEF", len(d) == 1)
+    cmd(fd, b"u")
+    print("  A/B toggled during SPI traffic")
+
     os.close(fd)
     print("\n" + ("ALL TESTS PASSED" if all_ok else "SOME TESTS FAILED"))
     return 0 if all_ok else 1

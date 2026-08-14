@@ -293,7 +293,8 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
 
     /* walk entries newest-first, place right-to-left */
     int x = WAVE_W;
-    int prev_level = BOT; /* idle line level, tracked across byte entries */
+    int prev_level = BOT;   /* idle line level, tracked across byte entries */
+    uint8_t hist_port = port; /* port state, walks backward through history */
     for (int i = n - 1; i >= 0 && x > 0; i--) {
         const wave_entry_t *e = &entries[i];
         int w = entry_width(e->code);
@@ -304,12 +305,18 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
         }
 
         switch (row) {
-            case 0: /* SCK: pulse on every byte, dim on disconnect */
+            case 0: /* SCK: 8 clock pulses per byte, dim on disconnect */
                 if (e->code == 'x') {
                     hline(x, x + w - 1, TOP, DIM);
                     hline(x, x + w - 1, BOT, DIM);
-                } else if (e->code == 'b' || e->code == 'c' || e->code == 'a') {
-                    vline(x + w / 2, TOP, BOT, FULL);
+                } else if (e->code == 'b' || e->code == 'c') {
+                    hline(x, x + w - 1, BOT, FULL); /* baseline */
+                    for (int bit = 0; bit < 8; bit++) {
+                        int px = x + 1 + bit * 2;
+                        if (px >= x + w) break;
+                        vline(px, TOP, BOT, FULL);
+                    }
+                } else if (e->code == 'a') {
                     hline(x, x + w - 1, BOT, FULL);
                 }
                 break;
@@ -340,17 +347,19 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
                     hline(x, x + w - 1, TOP, DIM);
                     hline(x, x + w - 1, BOT, DIM);
                 } else if (e->code == 'a') {
-                    /* v0 holds the port snapshot; show a transition if the
-                     * relevant bit changed vs the current snapshot */
-                    bool was = (e->v0 & mask) != 0;
-                    bool now = (port & mask) != 0;
-                    int y = now ? TOP : BOT;
-                    hline(x, x + w - 1, y, FULL);
-                    if (was != now) {
+                    /* v0 = port state BEFORE this change; hist_port is the
+                     * state AFTER (to the right).  Draw new state, then a
+                     * transition edge at the left boundary to the old state. */
+                    bool new_bit = (hist_port & mask) != 0;
+                    bool old_bit = (e->v0 & mask) != 0;
+                    int new_y = new_bit ? TOP : BOT;
+                    hline(x, x + w - 1, new_y, FULL);
+                    if (old_bit != new_bit) {
                         vline(x, TOP, BOT, FULL);
                     }
+                    hist_port = e->v0; /* state before, for entries to the left */
                 } else {
-                    int y = (port & mask) ? TOP : BOT;
+                    int y = (hist_port & mask) ? TOP : BOT;
                     hline(x, x + w - 1, y, FULL);
                 }
                 break;
