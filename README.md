@@ -16,7 +16,7 @@ and there are included drivers for
 * Python 2 and 3
 * Windows/Mac/Linux C/C++
 
-![front](/images/DSC_1313a.JPG)
+![front](/images/spidriver-pico-live.jpg)
 
 ## Firmware for the Raspberry Pi Pico
 
