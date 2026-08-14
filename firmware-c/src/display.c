@@ -126,7 +126,7 @@ static int entry_width(uint8_t code) {
         case 'b':
             return 18;
         case 'c':
-            return 8;
+            return 18; /* duplex bytes get the same 18-col waveform as 'b' */
         default:
             return 8;
     }
@@ -186,14 +186,14 @@ void display_results(const st7735_bus *lcd, int32_t vbus_mv, int32_t cur_ma) {
     int len = snprintf(buf, sizeof(buf), "%d.%02d", iv, fv);
     (void)len;
     int w = text_width(buf);
-    st7735_fill_rect(lcd, 12, 14, (uint16_t)w, 10, 0, 0, 0);
-    draw_number(lcd, 12, 14, buf);
+    st7735_fill_rect(lcd, 12, 12, (uint16_t)w, 9, 0, 0, 0);
+    draw_number(lcd, 12, 12, buf);
 
     len = snprintf(buf, sizeof(buf), "%3d", (int)cur_ma);
     (void)len;
     w = text_width(buf);
-    st7735_fill_rect(lcd, 70, 14, (uint16_t)w, 10, 0, 0, 0);
-    draw_number(lcd, 70, 14, buf);
+    st7735_fill_rect(lcd, 70, 12, (uint16_t)w, 9, 0, 0, 0);
+    draw_number(lcd, 70, 12, buf);
 }
 
 /* ---- waveform rendering ------------------------------------------------- */
@@ -229,19 +229,35 @@ static void vline(int x, int y0, int y1, uint8_t v) {
 #define FULL 15
 #define DIM 7
 
-/* Draw a byte as a bit waveform across [x0, x0+w).  level high/low. */
-static void draw_byte_wave(int x0, int w, uint8_t byte, bool invert) {
+/* Draw a byte as a bit waveform across [x0, x0+w).  level high/low.
+ * prev_level: the signal level just before this byte (TOP/BOT, or -1).
+ * Returns the level at the end of the byte. */
+static int draw_byte_wave(int x0, int w, uint8_t byte, bool invert,
+                         int prev_level) {
+    /* transition from previous byte's tail to this byte's first bit */
+    int first_b = (byte >> 7) & 1;
+    if (invert) first_b = 1 - first_b;
+    int first_y = first_b ? TOP : BOT;
+    if (prev_level >= 0 && first_y != prev_level) {
+        vline(x0, TOP, BOT, FULL);
+    }
+
     int x = x0;
     for (int bit = 0; bit < 8; bit++) {
         int b = (byte >> (7 - bit)) & 1;
         if (invert) b = 1 - b;
         int y = b ? TOP : BOT;
-        /* step width: 2 px for MOSI-style (18 wide), 1 px for MISO (8) */
-        int step = (w >= 18) ? 2 : 1;
-        int nx = x + step;
+        int nx = x + 2;
         if (nx > x0 + w) nx = x0 + w;
-        hline(x, nx, y, FULL);
+        hline(x, nx - 1, y, FULL);
         x = nx;
+    }
+    /* fill trailing columns with the last bit's level (entry is 18 wide,
+     * 8 bits * 2 px = 16 drawn, extend the tail to avoid gaps) */
+    if (x < x0 + w) {
+        int b = byte & 1;
+        if (invert) b = 1 - b;
+        hline(x, x0 + w - 1, b ? TOP : BOT, FULL);
     }
     /* vertical transitions between bit levels */
     x = x0;
@@ -254,8 +270,11 @@ static void draw_byte_wave(int x0, int w, uint8_t byte, bool invert) {
             vline(x, TOP, BOT, FULL);
         }
         prev = y;
-        x += (w >= 18) ? 2 : 1;
+        x += 2;
     }
+    int last_b = byte & 1;
+    if (invert) last_b = 1 - last_b;
+    return last_b ? TOP : BOT;
 }
 
 /* Render one strip row. */
@@ -266,6 +285,7 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
 
     /* walk entries newest-first, place right-to-left */
     int x = WAVE_W;
+    int prev_level = BOT; /* idle line level, tracked across byte entries */
     for (int i = n - 1; i >= 0 && x > 0; i--) {
         const wave_entry_t *e = &entries[i];
         int w = entry_width(e->code);
@@ -290,7 +310,7 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
                     hline(x, x + w - 1, TOP, DIM);
                     hline(x, x + w - 1, BOT, DIM);
                 } else if (e->code == 'c') {
-                    draw_byte_wave(x, w, e->v1, false);
+                    prev_level = draw_byte_wave(x, w, e->v1, false, prev_level);
                 } else if (e->code == 'a') {
                     hline(x, x + w - 1, BOT, FULL);
                 }
@@ -301,7 +321,7 @@ static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n
                     hline(x, x + w - 1, TOP, DIM);
                     hline(x, x + w - 1, BOT, DIM);
                 } else if (e->code == 'b' || e->code == 'c') {
-                    draw_byte_wave(x, w, e->v0, false);
+                    prev_level = draw_byte_wave(x, w, e->v0, false, prev_level);
                 } else if (e->code == 'a') {
                     hline(x, x + w - 1, BOT, FULL);
                 }
@@ -374,10 +394,10 @@ static void boxes(const st7735_bus *lcd, uint8_t port) {
         if (!on) { r = g = b = 0; }
         int bx = 97, by = labels[i].y - 3;
         st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)by, 30, 1, r, g, b);
-        st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)(by + 13), 30, 1, r, g,
+        st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)(by + 14), 30, 1, r, g,
                          b);
-        st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)by, 1, 14, r, g, b);
-        st7735_fill_rect(lcd, (uint16_t)(bx + 29), (uint16_t)by, 1, 14, r, g,
+        st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)by, 1, 15, r, g, b);
+        st7735_fill_rect(lcd, (uint16_t)(bx + 29), (uint16_t)by, 1, 15, r, g,
                          b);
     }
 }
@@ -388,7 +408,7 @@ void display_waves(const st7735_bus *lcd, const wave_entry_t *entries, int n,
         render_row(lcd, entries, n, port, i, labels[i].r, labels[i].g,
                    labels[i].b);
     }
-    annotate(lcd, entries, n, 72, false); /* MISO */
-    annotate(lcd, entries, n, 93, true);  /* MOSI */
+    annotate(lcd, entries, n, 74, false); /* MISO */
+    annotate(lcd, entries, n, 95, true);  /* MOSI */
     boxes(lcd, port);
 }

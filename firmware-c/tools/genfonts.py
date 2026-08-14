@@ -64,12 +64,15 @@ def gen_big():
         if bbox is None:
             bbox = (2, 0, 4, 6)
         x1, y1 = bbox[2], bbox[3]
+        # Original mkfont.py crops from draw_y+5 (Plex Sans 13 pt puts
+        # the glyph ink ~5 rows below the draw origin).
+        y0 = 5
         if ch in "0123456789":
             # digits are fixed 8x9 like the original mkfont.py
-            crop = im.crop((2, 0, 10, 9))
+            crop = im.crop((2, y0, 10, y0 + 9))
         else:
-            # top-anchored at y=0, left at x=2, width/height from tight bbox
-            crop = im.crop((2, 0, x1, y1))
+            # left at x=2, top at y0, width/height from tight bbox
+            crop = im.crop((2, y0, x1, y1))
         cw, chh = crop.size
         px = [(int(v) * 15) // 255 for v in crop.getdata()]  # type: ignore[operator]  # 0..255 -> 0..15
         glyphs.append((ch, cw, chh, pack_nibbles(px)))
