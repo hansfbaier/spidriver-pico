@@ -1,0 +1,373 @@
+/* SPIDriver display rendering.  See display.h.
+ *
+ * The layout mirrors the original firmware (firmware/st7735.fs and
+ * firmware/st7735s/mkfont.py): portrait 128x160, a top readings row, six
+ * waveform rows whose labels sit on the right edge, hex annotation rows and
+ * CS/A/B boxes.  Rendering is done in literal portrait coordinates
+ * (ST7735_MADCTL), so no 90-degree window rotation is needed. */
+#include "display.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include "fonts.h"
+
+/* ---- glyph lookup ----------------------------------------------------- */
+
+static const big_glyph_t *big_lookup(char c) {
+    for (unsigned i = 0; i < BIG_FONT_COUNT; i++) {
+        if (big_font[i].ch == c) {
+            return &big_font[i];
+        }
+    }
+    return NULL;
+}
+
+static int text_width(const char *s) {
+    int w = 0;
+    for (; *s; s++) {
+        if (*s == ' ') {
+            w += 4;
+        } else {
+            const big_glyph_t *g = big_lookup(*s);
+            if (g) {
+                w += g->w;
+            }
+        }
+    }
+    return w;
+}
+
+static void draw_glyph(const st7735_bus *lcd, const big_glyph_t *g, int x,
+                       int y, uint8_t r, uint8_t gr, uint8_t b) {
+    st7735_set_window(lcd, (uint16_t)x, (uint16_t)y,
+                      (uint16_t)(x + g->w - 1), (uint16_t)(y + g->h - 1));
+    st7735_start_pixels(lcd);
+    int npix = g->w * g->h;
+    int nbytes = (npix + 1) / 2;
+    for (int i = 0; i < nbytes; i++) {
+        uint8_t px = g->bits[i];
+        uint8_t hi = px >> 4;
+        uint8_t lo = px & 0x0F;
+        st7735_pixel(lcd, (uint8_t)(r * hi >> 4), (uint8_t)(gr * hi >> 4),
+                     (uint8_t)(b * hi >> 4));
+        if (i * 2 + 1 < npix) {
+            st7735_pixel(lcd, (uint8_t)(r * lo >> 4), (uint8_t)(gr * lo >> 4),
+                         (uint8_t)(b * lo >> 4));
+        }
+    }
+    st7735_end_pixels(lcd);
+}
+
+static void draw_text(const st7735_bus *lcd, const char *s, int x, int y,
+                      uint8_t r, uint8_t g, uint8_t b) {
+    for (; *s; s++) {
+        if (*s == ' ') {
+            x += 4;
+            continue;
+        }
+        const big_glyph_t *gl = big_lookup(*s);
+        if (gl) {
+            draw_glyph(lcd, gl, x, y, r, g, b);
+            x += gl->w;
+        }
+    }
+}
+
+/* 4x5 micro font (hex digits), 2 px/byte. */
+static void draw_micro(const st7735_bus *lcd, uint8_t nib, int x, int y,
+                       uint8_t r, uint8_t g, uint8_t b) {
+    const uint8_t *bits = micro_font[nib & 0x0F];
+    st7735_set_window(lcd, (uint16_t)x, (uint16_t)y, (uint16_t)(x + 3),
+                      (uint16_t)(y + 4));
+    st7735_start_pixels(lcd);
+    for (int i = 0; i < 10; i++) {
+        uint8_t px = bits[i];
+        st7735_pixel(lcd, (uint8_t)(r * (px >> 4) >> 4),
+                     (uint8_t)(g * (px >> 4) >> 4),
+                     (uint8_t)(b * (px >> 4) >> 4));
+        st7735_pixel(lcd, (uint8_t)(r * (px & 0x0F) >> 4),
+                     (uint8_t)(g * (px & 0x0F) >> 4),
+                     (uint8_t)(b * (px & 0x0F) >> 4));
+    }
+    st7735_end_pixels(lcd);
+}
+
+/* ---- layout ------------------------------------------------------------ */
+
+/* Waveform labels: name, y, color (r,g,b), x offset from 112-w/2. */
+typedef struct {
+    const char *name;
+    int y;
+    uint8_t r, g, b;
+    int dx;
+} label_t;
+
+static const label_t labels[6] = {
+    {"SCK", 43, 15, 9, 2, -2},
+    {"MISO", 64, 15, 14, 2, 0},
+    {"MOSI", 85, 8, 15, 2, 0},
+    {"CS", 106, 1, 9, 15, -1},
+    {"A", 127, 13, 7, 13, 0},
+    {"B", 148, 8, 8, 6, 0},
+};
+
+#define WAVE_X 0
+#define WAVE_W 90
+#define WAVE_H 9
+
+/* entry width in waveform columns (matches original `width` table) */
+static int entry_width(uint8_t code) {
+    switch (code) {
+        case 'x':
+            return 7;
+        case 'a':
+            return 18;
+        case 'b':
+            return 18;
+        case 'c':
+            return 8;
+        default:
+            return 8;
+    }
+}
+
+/* ---- init & static text ------------------------------------------------ */
+
+void display_init(const st7735_bus *lcd) {
+    st7735_init(lcd);
+    st7735_fill_rect(lcd, 0, 0, ST7735_W, ST7735_H, 0, 0, 0);
+
+    /* static labels */
+    for (int i = 0; i < 6; i++) {
+        int x = 112 - text_width(labels[i].name) / 2 + labels[i].dx;
+        draw_text(lcd, labels[i].name, x, labels[i].y, labels[i].r, labels[i].g,
+                  labels[i].b);
+    }
+    draw_text(lcd, "V", 45, 12, 15, 15, 15);
+    draw_text(lcd, "mA", 98, 12, 15, 15, 15);
+}
+
+/* ---- top readings ------------------------------------------------------- */
+
+/* Render "x.yz" (millivolts) and a 3-column right-aligned milliamp value. */
+static void draw_number(const st7735_bus *lcd, int x, int y, const char *s) {
+    draw_text(lcd, s, x, y, 15, 15, 15);
+}
+
+void display_results(const st7735_bus *lcd, int32_t vbus_mv, int32_t cur_ma) {
+    char buf[16];
+
+    /* voltage: "%d.%02d" from centivolts */
+    int32_t cv = vbus_mv / 10;
+    int iv = (int)(cv / 100);
+    int fv = (int)(cv % 100);
+    if (fv < 0) fv = -fv;
+    if (iv < 0) iv = -iv;
+
+    /* clear reading areas, then draw */
+    st7735_fill_rect(lcd, 12, 14, 34, 12, 0, 0, 0);
+    int len = snprintf(buf, sizeof(buf), "%d.%02d", iv, fv);
+    (void)len;
+    draw_number(lcd, 12, 14, buf);
+
+    st7735_fill_rect(lcd, 70, 14, 28, 12, 0, 0, 0);
+    len = snprintf(buf, sizeof(buf), "%3d", (int)cur_ma);
+    (void)len;
+    draw_number(lcd, 70, 14, buf);
+}
+
+/* ---- waveform rendering ------------------------------------------------- */
+
+/* 90x9 strip framebuffer: intensity 0..15 per pixel. */
+static uint8_t strip[WAVE_W * WAVE_H];
+
+static void strip_clear(void) { memset(strip, 0, sizeof(strip)); }
+
+/* horizontal line helper into the framebuffer */
+static void hline(int x0, int x1, int y, uint8_t v) {
+    if (y < 0 || y >= WAVE_H) return;
+    if (x0 > x1) { int t = x0; x0 = x1; x1 = t; }
+    if (x0 < 0) x0 = 0;
+    if (x1 >= WAVE_W) x1 = WAVE_W - 1;
+    for (int x = x0; x <= x1; x++) {
+        strip[y * WAVE_W + x] = v;
+    }
+}
+
+static void vline(int x, int y0, int y1, uint8_t v) {
+    if (x < 0 || x >= WAVE_W) return;
+    if (y0 > y1) { int t = y0; y0 = y1; y1 = t; }
+    if (y0 < 0) y0 = 0;
+    if (y1 >= WAVE_H) y1 = WAVE_H - 1;
+    for (int y = y0; y <= y1; y++) {
+        strip[y * WAVE_W + x] = v;
+    }
+}
+
+#define TOP 2
+#define BOT 7
+#define FULL 15
+#define DIM 7
+
+/* Draw a byte as a bit waveform across [x0, x0+w).  level high/low. */
+static void draw_byte_wave(int x0, int w, uint8_t byte, bool invert) {
+    int x = x0;
+    for (int bit = 0; bit < 8; bit++) {
+        int b = (byte >> (7 - bit)) & 1;
+        if (invert) b = 1 - b;
+        int y = b ? TOP : BOT;
+        /* step width: 2 px for MOSI-style (18 wide), 1 px for MISO (8) */
+        int step = (w >= 18) ? 2 : 1;
+        int nx = x + step;
+        if (nx > x0 + w) nx = x0 + w;
+        hline(x, nx, y, FULL);
+        x = nx;
+    }
+    /* vertical transitions between bit levels */
+    x = x0;
+    int prev = -1;
+    for (int bit = 0; bit < 8; bit++) {
+        int b = (byte >> (7 - bit)) & 1;
+        if (invert) b = 1 - b;
+        int y = b ? TOP : BOT;
+        if (prev >= 0 && y != prev) {
+            vline(x, TOP, BOT, FULL);
+        }
+        prev = y;
+        x += (w >= 18) ? 2 : 1;
+    }
+}
+
+/* Render one strip row. */
+static void render_row(const st7735_bus *lcd, const wave_entry_t *entries, int n,
+                       uint8_t port, int row, uint8_t r, uint8_t g, uint8_t b) {
+    (void)lcd;
+    strip_clear();
+
+    /* walk entries newest-first, place right-to-left */
+    int x = WAVE_W;
+    for (int i = n - 1; i >= 0 && x > 0; i--) {
+        const wave_entry_t *e = &entries[i];
+        int w = entry_width(e->code);
+        x -= w;
+        if (x < 0) {
+            x = 0;
+            w = WAVE_W; /* clamp trailing entry */
+        }
+
+        switch (row) {
+            case 0: /* SCK: pulse on every byte, dim on disconnect */
+                if (e->code == 'x') {
+                    hline(x, x + w - 1, TOP, DIM);
+                    hline(x, x + w - 1, BOT, DIM);
+                } else if (e->code == 'b' || e->code == 'c' || e->code == 'a') {
+                    vline(x + w / 2, TOP, BOT, FULL);
+                    hline(x, x + w - 1, BOT, FULL);
+                }
+                break;
+            case 1: /* MISO: 'c' entries */
+                if (e->code == 'x') {
+                    hline(x, x + w - 1, TOP, DIM);
+                    hline(x, x + w - 1, BOT, DIM);
+                } else if (e->code == 'c') {
+                    draw_byte_wave(x, w, e->v1, false);
+                } else if (e->code == 'a') {
+                    hline(x, x + w - 1, BOT, FULL);
+                }
+                break;
+            case 2: /* MOSI: 'b' entries */
+                if (e->code == 'x') {
+                    hline(x, x + w - 1, TOP, DIM);
+                    hline(x, x + w - 1, BOT, DIM);
+                } else if (e->code == 'b') {
+                    draw_byte_wave(x, w, e->v0, false);
+                } else if (e->code == 'a') {
+                    hline(x, x + w - 1, BOT, FULL);
+                }
+                break;
+            default: { /* CS/A/B: port bits, mask per row */
+                uint8_t mask = (row == 3) ? 0x08 : (row == 4) ? 0x40 : 0x80;
+                if (e->code == 'x') {
+                    hline(x, x + w - 1, TOP, DIM);
+                    hline(x, x + w - 1, BOT, DIM);
+                } else if (e->code == 'a') {
+                    /* v0 holds the port snapshot; show a transition if the
+                     * relevant bit changed vs the current snapshot */
+                    bool was = (e->v0 & mask) != 0;
+                    bool now = (port & mask) != 0;
+                    int y = now ? TOP : BOT;
+                    hline(x, x + w - 1, y, FULL);
+                    if (was != now) {
+                        vline(x, TOP, BOT, FULL);
+                    }
+                } else {
+                    int y = (port & mask) ? TOP : BOT;
+                    hline(x, x + w - 1, y, FULL);
+                }
+                break;
+            }
+        }
+    }
+
+    /* blit */
+    int ytop = labels[row].y + 4;
+    st7735_set_window(lcd, WAVE_X, (uint16_t)ytop, WAVE_X + WAVE_W - 1,
+                      (uint16_t)(ytop + WAVE_H - 1));
+    st7735_start_pixels(lcd);
+    for (int y = 0; y < WAVE_H; y++) {
+        for (int xx = 0; xx < WAVE_W; xx++) {
+            uint8_t v = strip[y * WAVE_W + xx];
+            st7735_pixel(lcd, (uint8_t)(r * v >> 4), (uint8_t)(g * v >> 4),
+                         (uint8_t)(b * v >> 4));
+        }
+    }
+    st7735_end_pixels(lcd);
+}
+
+/* hexadecimal annotation row (matches original `annotate`) */
+static void annotate(const st7735_bus *lcd, const wave_entry_t *entries, int n,
+                     int y, bool mosi) {
+    st7735_fill_rect(lcd, 0, (uint16_t)y, 90, 5, 0, 0, 0);
+    int x = WAVE_W;
+    for (int i = n - 1; i >= 0 && x > 0; i--) {
+        const wave_entry_t *e = &entries[i];
+        int w = entry_width(e->code);
+        x -= w;
+        if (x < 0) break;
+        bool match = mosi ? (e->code == 'b') : (e->code == 'c');
+        if (match) {
+            uint8_t byte = mosi ? e->v0 : e->v1;
+            draw_micro(lcd, byte >> 4, x, y, 15, 15, 15);
+            draw_micro(lcd, byte & 0x0F, x + 5, y, 15, 15, 15);
+        }
+    }
+}
+
+/* CS/A/B state boxes (outline only, bright when the signal is high) */
+static void boxes(const st7735_bus *lcd, uint8_t port) {
+    for (int i = 3; i < 6; i++) {
+        uint8_t mask = (i == 3) ? 0x08 : (i == 4) ? 0x40 : 0x80;
+        bool on = (port & mask) != 0;
+        uint8_t r = labels[i].r, g = labels[i].g, b = labels[i].b;
+        if (!on) { r = g = b = 0; }
+        int bx = 97, by = labels[i].y - 3;
+        st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)by, 30, 1, r, g, b);
+        st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)(by + 13), 30, 1, r, g,
+                         b);
+        st7735_fill_rect(lcd, (uint16_t)bx, (uint16_t)by, 1, 14, r, g, b);
+        st7735_fill_rect(lcd, (uint16_t)(bx + 29), (uint16_t)by, 1, 14, r, g,
+                         b);
+    }
+}
+
+void display_waves(const st7735_bus *lcd, const wave_entry_t *entries, int n,
+                   uint8_t port) {
+    for (int i = 0; i < 6; i++) {
+        render_row(lcd, entries, n, port, i, labels[i].r, labels[i].g,
+                   labels[i].b);
+    }
+    annotate(lcd, entries, n, 76, false); /* MISO */
+    annotate(lcd, entries, n, 97, true);  /* MOSI */
+    boxes(lcd, port);
+}
