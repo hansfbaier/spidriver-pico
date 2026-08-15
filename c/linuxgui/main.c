@@ -349,6 +349,7 @@ static void activate(GtkApplication *app, gpointer data) {
     edit_tx = gtk_entry_new();
     gtk_entry_set_max_length(GTK_ENTRY(edit_tx), 160);
     g_signal_connect(edit_tx, "insert-text", G_CALLBACK(on_tx_insert), NULL);
+    g_signal_connect(edit_tx, "activate", G_CALLBACK(on_transfer), NULL);
 
     GtkWidget *btn_tx = gtk_button_new_with_label("Transfer");
     g_signal_connect(btn_tx, "clicked", G_CALLBACK(on_transfer), NULL);
