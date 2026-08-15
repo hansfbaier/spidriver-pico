@@ -32,8 +32,15 @@ display.
 
 ![Pico pinout](firmware-c/images/pico-pinout.png)
 
+![Architecture](images/spidriver-pico-architecture.png)
+
 See [`firmware-c/README.md`](firmware-c/README.md) for the pin map, build instructions and
 port details.
+
+A technical deep-dive of the RP2040 implementation is in
+[`firmware-c/docs/rp2040-overview.md`](firmware-c/docs/rp2040-overview.md)
+(also as [LaTeX](firmware-c/docs/rp2040-overview.tex) and
+[PDF](firmware-c/docs/rp2040-overview.pdf)).
 
 ## Contributed language bindings
 

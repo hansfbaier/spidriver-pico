@@ -137,6 +137,15 @@ printf '?' | ./build/spidriver_host        # print one status line
 * **1200-baud reflash**: opening the port at 1200 baud reboots into BOOTSEL
   (Arduino convention), so firmware updates need no button press.
 
+## Documentation
+
+A technical deep-dive of the RP2040 implementation is in
+[`docs/rp2040-overview.md`](docs/rp2040-overview.md) — architecture, pin map,
+USB CDC transport, host protocol, CRC, measurements, display rendering and
+build steps. LaTeX source and a rendered PDF live alongside:
+[`docs/rp2040-overview.tex`](docs/rp2040-overview.tex),
+[`docs/rp2040-overview.pdf`](docs/rp2040-overview.pdf).
+
 ## License
 
 Same terms as the upstream project (see the repository root `LICENSE`).
