@@ -122,11 +122,13 @@ def main():
     all_ok &= expect("A low + B high", fields[6] == "0" and fields[7] == "1")
     cmd(fd, b"b\x00")
 
-    # 5. Duplex transfer lengths
+    # 5. Duplex transfer lengths (A/B toggled during every transfer)
     print("\n5. Duplex transfers")
     patterns = [bytes(range(1, n + 1)) for n in (1, 2, 4, 8, 16, 32, 64)]
     loopback_ok = True
-    for p in patterns:
+    for i, p in enumerate(patterns):
+        cmd(fd, b"a" + bytes([i & 1]))  # A toggles every round
+        cmd(fd, b"b" + bytes([(i >> 1) & 1]))  # B toggles every other round
         c = bytes([0x80 | (len(p) - 1)])
         d = cmd(fd, c + p, expect_len=len(p), timeout=1.0)
         all_ok &= expect(
@@ -139,16 +141,20 @@ def main():
     else:
         print("  (MOSI not looped to MISO; only length checked)")
 
-    # 6. Write-only transfers
+    # 6. Write-only transfers (A/B toggled during every transfer)
     print("\n6. Write-only transfers")
-    for n in (1, 2, 8, 64):
+    for i, n in enumerate((1, 2, 8, 64)):
+        cmd(fd, b"a" + bytes([i & 1]))
+        cmd(fd, b"b" + bytes([(i >> 1) & 1]))
         c = bytes([0xC0 | (n - 1)]) + bytes(range(n))
         d = cmd(fd, c, expect_len=0, timeout=0.2)
         all_ok &= expect(f"  write {n:2d}B no response", d == b"", f" got {len(d)}B")
 
-    # 7. Stress: many transactions
+    # 7. Stress: many transactions (A/B toggled throughout)
     print("\n7. Stress: 100 duplex + status rounds")
     for i in range(100):
+        cmd(fd, b"a" + bytes([i & 1]))
+        cmd(fd, b"b" + bytes([(i >> 1) & 1]))
         c = bytes([0x81, i & 0xFF, (~i) & 0xFF])
         d = cmd(fd, c, expect_len=2, timeout=0.5)
         if len(d) != 2:
@@ -166,16 +172,16 @@ def main():
     # 9. Display exercise: SPI traffic interleaved with A/B toggles
     print("\n9. Display exercise (SPI + A/B)")
     cmd(fd, b"s")
-    cmd(fd, b"a\x01")                              # A high
+    cmd(fd, b"a\x01")  # A high
     d = cmd(fd, bytes([0x80, 0xDE]), expect_len=1)
     all_ok &= expect("  duplex 0xDE", len(d) == 1)
-    cmd(fd, b"b\x01")                              # B high
+    cmd(fd, b"b\x01")  # B high
     d = cmd(fd, bytes([0x80, 0xAD]), expect_len=1)
     all_ok &= expect("  duplex 0xAD", len(d) == 1)
-    cmd(fd, b"a\x00")                              # A low
+    cmd(fd, b"a\x00")  # A low
     d = cmd(fd, bytes([0x80, 0xBE]), expect_len=1)
     all_ok &= expect("  duplex 0xBE", len(d) == 1)
-    cmd(fd, b"b\x00")                              # B low
+    cmd(fd, b"b\x00")  # B low
     d = cmd(fd, bytes([0x80, 0xEF]), expect_len=1)
     all_ok &= expect("  duplex 0xEF", len(d) == 1)
     cmd(fd, b"u")
